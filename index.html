@@ -108,6 +108,12 @@
   .say-input::placeholder{color:var(--faint)}
   .mic-note{font-size:12.5px; color:var(--faint); margin-top:8px}
   .mic-note b{color:var(--muted); font-weight:500}
+  .voice-unlock{
+    display:block; width:100%; margin-top:10px; padding:11px 16px; border-radius:10px;
+    background:rgba(255,182,92,.12); border:1px solid rgba(255,182,92,.5); color:var(--amber);
+    font-weight:600; font-size:14px;
+  }
+  .voice-unlock:hover{background:rgba(255,182,92,.2)}
 
   .chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px}
   .chip{
@@ -235,6 +241,7 @@
         <input class="say-input" id="sayInput" type="text" placeholder='…or type a command and press Enter' autocomplete="off">
       </div>
       <p class="mic-note" id="micNote">Anna listens the whole time this tab is open — say <b>“Hi Anna”</b>, then your command. Speaking over her interrupts her (barge-in).</p>
+      <button id="voiceUnlock" class="voice-unlock" hidden>🔊 Tap once to enable Anna’s voice</button>
       <div class="chips" id="chips" role="group" aria-label="Example commands"></div>
       <div class="transcript" id="transcript" aria-live="polite"></div>
     </div>
@@ -451,20 +458,35 @@ function speechDone(){
 function shutUp(){                 // cancel speech AND clear the flag, everywhere
   speechSynthesis.cancel();
   annaSpeaking = false;
+  speakSeq++;                      // invalidate any pending retry timers
   clearInterval(ttsKeepalive); clearTimeout(speakGuard);
 }
+function bestLocalVoice(){
+  const all = speechSynthesis.getVoices().filter(v => v.lang.startsWith("en") && v.localService);
+  const rank = v => { const i = FEMALE.findIndex(f => v.name.toLowerCase().includes(f)); return i === -1 ? 50 : i; };
+  return all.sort((a,b) => rank(a) - rank(b))[0] || null;
+}
+let lastSpoken = "", speakSeq = 0;
 function speak(text){
   addMsg("ai", text);
+  lastSpoken = text;
   if (!("speechSynthesis" in window)) return;
   shutUp();
+  const seq = ++speakSeq;
+  // Chrome drops the utterance if speak() follows cancel() immediately — give it a beat.
+  setTimeout(()=>{ if (seq === speakSeq) reallySpeak(text, 0, seq); }, 80);
+}
+function reallySpeak(text, attempt, seq){
   const u = new SpeechSynthesisUtterance(text);
   currentUtterance = u;
-  if (chosenVoice) u.voice = chosenVoice;
+  const v = attempt === 0 ? chosenVoice : bestLocalVoice();
+  if (v) u.voice = v;
   u.rate = 1;
+  let started = false;
   u.onstart = ()=>{
     // Flag only once audio actually plays — if the browser blocks or delays TTS,
     // the mic must NOT go deaf waiting for sound that never comes.
-    annaSpeaking = true;
+    started = true; annaSpeaking = true;
     setOrb("speaking");
     // failsafe: even if onend never fires, un-deafen the mic after the estimated duration
     clearTimeout(speakGuard);
@@ -472,8 +494,25 @@ function speak(text){
     // Chrome silently pauses remote-voice speech mid-utterance; resume() un-sticks it.
     ttsKeepalive = setInterval(()=>{ if (speechSynthesis.speaking) speechSynthesis.resume(); }, 3000);
   };
-  u.onend = speechDone; u.onerror = speechDone;
+  u.onend = speechDone;
+  u.onerror = ()=>{
+    if (!started && attempt === 0 && seq === speakSeq){
+      // network voice failed to start — drop to a reliable on-device voice for good
+      const local = bestLocalVoice(); if (local) chosenVoice = local;
+      reallySpeak(text, 1, seq);
+    } else speechDone();
+  };
   speechSynthesis.speak(u);
+  // Watch for a SILENT failure: no error, no audio. Retry local, then ask for a tap.
+  setTimeout(()=>{
+    if (seq !== speakSeq || started || speechSynthesis.speaking) return;
+    if (attempt === 0){
+      const local = bestLocalVoice(); if (local) chosenVoice = local;
+      reallySpeak(text, 1, seq);
+    } else {
+      $("voiceUnlock").hidden = false;   // browser wants a user gesture before audio
+    }
+  }, 1200);
 }
 function setOrb(state){
   orb.className = "orb" + (state === "idle" ? "" : " " + state);
@@ -780,6 +819,10 @@ const unlockTTS = ()=>{
 };
 document.addEventListener("pointerdown", unlockTTS);
 document.addEventListener("keydown", unlockTTS);
+$("voiceUnlock").addEventListener("click", ()=>{
+  $("voiceUnlock").hidden = true;
+  if (lastSpoken) speak(lastSpoken);   // the tap itself is the gesture Chrome wants
+});
 function refreshMicUI(){
   if (!rec) return;
   micBtn.classList.toggle("live", micOn);
