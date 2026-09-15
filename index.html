@@ -432,13 +432,15 @@ function pickVoice(){
   const all = speechSynthesis.getVoices().filter(v => v.lang.startsWith("en"));
   const rank = v => {
     const n = v.name.toLowerCase();
-    // Neural voices first (Edge "... Online (Natural)"), then Chrome's Google
-    // voice — both far less robotic than legacy local voices.
+    // Edge's neural voices are the best AND reliable. After those, ON-DEVICE
+    // voices only: Chrome's Google network voices can fail with silent audio
+    // while still firing every event, which is undetectable from JS.
     if (n.includes("natural") && /aria|jenny|michelle|emma|ava|sonia|libby|clara/.test(n)) return 0;
     if (n.includes("natural")) return 1;
-    if (n.includes("google us english")) return 2;
     const i = FEMALE.findIndex(f => n.includes(f));
-    return 5 + (i === -1 ? 40 : i) + (v.localService ? 0 : 20);
+    if (v.localService) return i === -1 ? 40 : 3 + i;
+    if (n.includes("google us english")) return 50;
+    return 60;
   };
   chosenVoice = all.sort((a,b) => rank(a) - rank(b))[0] || null;
 }
