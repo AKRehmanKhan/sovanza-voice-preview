@@ -1,0 +1,749 @@
+<title>Sovanza Voice Preview</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Schibsted+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --bg:#0A1622; --panel:#112031; --panel-2:#152838; --inset:#0D1B29;
+    --line:#1F3B52;
+    --ink:#E9F1F7; --muted:#8CA3B8; --faint:#5E7891;
+    --teal:#41C4D2; --teal-deep:#2A8C99; --teal-ink:#0A1622;
+    --amber:#FFB65C; --green:#54D08F; --red:#F26D6D;
+    --navy:#122A42;
+    --radius:14px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"Schibsted Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
+    font-size:16px; line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--teal-deep); color:var(--ink)}
+  a{color:var(--teal)}
+  button{font:inherit; color:inherit; cursor:pointer; background:none; border:none}
+  button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible{
+    outline:2px solid var(--teal); outline-offset:2px; border-radius:6px;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:0 24px}
+
+  /* ---------- top bar ---------- */
+  header{
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#0E1E30 0%, var(--bg) 100%);
+  }
+  .bar{display:flex; align-items:center; justify-content:space-between; padding:18px 0; gap:16px; flex-wrap:wrap}
+  .wordmark{font-family:Sora,sans-serif; font-weight:700; letter-spacing:.22em; font-size:15px}
+  .wordmark small{display:block; letter-spacing:.02em; font-weight:400; font-size:11.5px; color:var(--muted); font-family:"Schibsted Grotesk",sans-serif; text-transform:none; margin-top:2px}
+  .sim-pill{
+    font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.14em;
+    color:var(--teal); border:1px solid var(--teal-deep); border-radius:999px; padding:6px 14px;
+    display:inline-flex; align-items:center; gap:8px; background:rgba(42,140,153,.08);
+  }
+  .sim-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--teal); animation:blink 2.2s ease-in-out infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+  /* ---------- hero ---------- */
+  .hero{padding:52px 0 34px}
+  .hero h1{
+    font-family:Sora,sans-serif; font-weight:700; font-size:clamp(30px,4.6vw,52px);
+    line-height:1.08; text-wrap:balance; max-width:15ch;
+  }
+  .hero h1 em{font-style:normal; color:var(--teal)}
+  .hero p{color:var(--muted); max-width:58ch; margin-top:16px; font-size:17px}
+  .hero p b{color:var(--ink); font-weight:500}
+
+  /* ---------- main grid ---------- */
+  .stage{display:grid; grid-template-columns:minmax(0,7fr) minmax(0,6fr); gap:20px; align-items:start; padding-bottom:20px}
+  @media (max-width:920px){ .stage{grid-template-columns:1fr} }
+  .panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    overflow:hidden;
+  }
+  .panel-head{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:14px 18px; border-bottom:1px solid var(--line); background:var(--panel-2);
+  }
+  .panel-head h2{font-family:Sora,sans-serif; font-size:13px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--muted)}
+  .panel-body{padding:18px}
+
+  /* ---------- voice console ---------- */
+  .orb-zone{display:flex; flex-direction:column; align-items:center; gap:14px; padding:10px 0 4px}
+  .orb{
+    width:118px; height:118px; border-radius:50%; position:relative; flex:none;
+    background:radial-gradient(circle at 34% 30%, #4ED4E2 0%, var(--teal-deep) 46%, #14405180 78%, transparent 100%);
+    box-shadow:0 0 42px rgba(65,196,210,.28), inset 0 0 24px rgba(10,22,34,.5);
+    transition:box-shadow .4s ease, transform .4s ease;
+  }
+  .orb::after{
+    content:""; position:absolute; inset:-14px; border-radius:50%;
+    border:1px solid rgba(65,196,210,.35);
+    animation:orb-idle 4.5s ease-in-out infinite;
+  }
+  @keyframes orb-idle{0%,100%{transform:scale(.96); opacity:.4}50%{transform:scale(1.04); opacity:.9}}
+  .orb.listening{box-shadow:0 0 70px rgba(65,196,210,.55), inset 0 0 24px rgba(10,22,34,.5); transform:scale(1.06)}
+  .orb.listening::after{animation-duration:1.1s}
+  .orb.speaking{box-shadow:0 0 60px rgba(255,182,92,.4), inset 0 0 24px rgba(10,22,34,.5)}
+  .orb.speaking::after{border-color:rgba(255,182,92,.45); animation-duration:1.6s}
+  @media (prefers-reduced-motion:reduce){
+    .orb::after{animation:none}
+    .sim-pill .dot{animation:none}
+    *{transition:none!important}
+  }
+  .orb-status{font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.1em; color:var(--faint); min-height:18px; text-align:center}
+
+  .mic-row{display:flex; gap:10px; width:100%; align-items:stretch}
+  .mic-btn{
+    flex:none; display:inline-flex; align-items:center; gap:10px;
+    background:var(--teal); color:var(--teal-ink); font-weight:700; font-family:Sora,sans-serif;
+    font-size:14px; padding:0 20px; border-radius:10px; min-height:48px;
+    transition:background .2s ease;
+  }
+  .mic-btn:hover{background:#5AD2DF}
+  .mic-btn.live{background:var(--red); color:#fff}
+  .mic-btn svg{flex:none}
+  .say-input{
+    flex:1; min-width:0; background:var(--inset); border:1px solid var(--line); border-radius:10px;
+    color:var(--ink); padding:0 16px; min-height:48px; font:inherit;
+  }
+  .say-input::placeholder{color:var(--faint)}
+  .mic-note{font-size:12.5px; color:var(--faint); margin-top:8px}
+
+  .chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px}
+  .chip{
+    font-size:13px; color:var(--ink); background:var(--panel-2); border:1px solid var(--line);
+    border-radius:999px; padding:7px 14px; transition:border-color .15s ease, background .15s ease;
+  }
+  .chip:hover{border-color:var(--teal-deep); background:#183349}
+
+  .transcript{
+    margin-top:16px; background:var(--inset); border:1px solid var(--line); border-radius:10px;
+    height:250px; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:10px;
+  }
+  .msg{max-width:88%; padding:9px 13px; border-radius:11px; font-size:14.5px; line-height:1.45}
+  .msg .who{display:block; font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.12em; text-transform:uppercase; margin-bottom:3px; color:var(--faint)}
+  .msg.user{align-self:flex-end; background:var(--navy); border:1px solid #1D3E5F}
+  .msg.ai{align-self:flex-start; background:var(--panel-2); border:1px solid var(--line)}
+  .msg.ai .who{color:var(--teal)}
+
+  .voice-ctrl{display:flex; gap:14px; margin-top:14px; flex-wrap:wrap; align-items:center}
+  .voice-ctrl label{font-size:12px; color:var(--muted); display:flex; align-items:center; gap:8px}
+  .voice-ctrl select{
+    background:var(--inset); color:var(--ink); border:1px solid var(--line); border-radius:8px;
+    padding:6px 8px; font-size:12.5px; max-width:190px;
+  }
+  .voice-ctrl input[type=range]{accent-color:var(--teal); width:110px}
+
+  /* ---------- home panel ---------- */
+  .alarm{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    background:var(--inset); border:1px solid var(--line); border-radius:10px; padding:12px 16px;
+  }
+  .alarm .label{font-family:Sora,sans-serif; font-size:13px; font-weight:600}
+  .alarm .label small{display:block; font-family:"IBM Plex Mono",monospace; font-weight:400; font-size:10.5px; letter-spacing:.1em; color:var(--faint); margin-top:2px}
+  .state-pill{
+    font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.12em; padding:6px 12px; border-radius:999px;
+  }
+  .state-pill.armed{background:rgba(242,109,109,.12); color:var(--red); border:1px solid rgba(242,109,109,.4)}
+  .state-pill.disarmed{background:rgba(84,208,143,.1); color:var(--green); border:1px solid rgba(84,208,143,.35)}
+
+  .thermo{
+    margin-top:12px; display:flex; align-items:center; justify-content:space-between; gap:12px;
+    background:var(--inset); border:1px solid var(--line); border-radius:10px; padding:12px 16px;
+  }
+  .thermo .temp{font-family:Sora,sans-serif; font-size:30px; font-weight:700; font-variant-numeric:tabular-nums}
+  .thermo .temp span{font-size:14px; color:var(--muted); font-weight:400}
+  .thermo .meta{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.1em; color:var(--faint); text-align:right}
+
+  .room{margin-top:16px}
+  .room h3{font-family:"IBM Plex Mono",monospace; font-size:10.5px; font-weight:500; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); margin-bottom:8px}
+  .devices{display:grid; grid-template-columns:repeat(auto-fill,minmax(146px,1fr)); gap:8px}
+  .device{
+    background:var(--inset); border:1px solid var(--line); border-radius:10px; padding:12px;
+    text-align:left; transition:border-color .25s ease, box-shadow .25s ease, background .25s ease;
+  }
+  .device .icon{display:block; font-size:20px; line-height:1; filter:grayscale(1) brightness(1.4); transition:filter .25s ease}
+  .device .name{display:block; font-size:13px; font-weight:500; margin-top:8px; line-height:1.3}
+  .device .state{display:block; font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.08em; color:var(--faint); margin-top:3px}
+  .device.on{border-color:rgba(255,182,92,.55); background:#1A2A35; box-shadow:0 0 22px rgba(255,182,92,.12)}
+  .device.on .icon{filter:none}
+  .device.on .state{color:var(--amber)}
+  .device.sensor{cursor:default}
+  .device.sensor .state{color:var(--green)}
+  .device.sensor.alert .state{color:var(--red)}
+  .device.flash{animation:flash .6s ease}
+  @keyframes flash{0%{box-shadow:0 0 0 3px rgba(65,196,210,.5)}100%{box-shadow:none}}
+
+  /* ---------- reminders + memory ---------- */
+  .lower{display:grid; grid-template-columns:1fr 1fr; gap:20px; padding:4px 0 20px}
+  @media (max-width:760px){ .lower{grid-template-columns:1fr} }
+  .empty{color:var(--faint); font-size:13.5px; font-style:italic}
+  .rem-list, .mem-list{display:flex; flex-direction:column; gap:8px}
+  .rem, .mem{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:var(--inset); border:1px solid var(--line); border-radius:9px; padding:10px 14px; font-size:14px;
+  }
+  .rem .when{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--teal); letter-spacing:.06em; flex:none}
+  .rem.fired{border-color:rgba(255,182,92,.5)}
+  .rem.fired .when{color:var(--amber)}
+  .mem .tag{font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.1em; color:var(--faint); text-transform:uppercase; flex:none}
+  .del{color:var(--faint); font-size:16px; line-height:1; padding:2px 6px; flex:none}
+  .del:hover{color:var(--red)}
+
+  /* ---------- proposal strip ---------- */
+  .bridge{border-top:1px solid var(--line); background:var(--navy); margin-top:26px}
+  .bridge-inner{padding:54px 0 60px}
+  .bridge h2{font-family:Sora,sans-serif; font-size:clamp(22px,3vw,32px); font-weight:700; text-wrap:balance; max-width:24ch}
+  .bridge > .wrap > p, .bridge p.lede{color:var(--muted); max-width:62ch; margin-top:12px}
+  .miles{display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-top:30px}
+  @media (max-width:920px){ .miles{grid-template-columns:1fr 1fr} }
+  @media (max-width:520px){ .miles{grid-template-columns:1fr} }
+  .mile{background:rgba(10,22,34,.5); border:1px solid #1D3E5F; border-radius:10px; padding:14px}
+  .mile .wk{font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.16em; color:var(--teal)}
+  .mile h4{font-family:Sora,sans-serif; font-size:13.5px; font-weight:600; margin-top:6px; line-height:1.3}
+  .mile p{font-size:12.5px; color:var(--muted); margin-top:5px; line-height:1.45}
+  .cta-row{display:flex; align-items:center; gap:18px; margin-top:34px; flex-wrap:wrap}
+  .cta{
+    display:inline-block; background:var(--teal); color:var(--teal-ink); font-family:Sora,sans-serif;
+    font-weight:700; font-size:15px; padding:14px 26px; border-radius:10px; text-decoration:none;
+  }
+  .cta:hover{background:#5AD2DF}
+  .cta-note{font-size:13.5px; color:var(--muted); max-width:40ch}
+  .cta-note b{color:var(--ink); font-weight:500}
+
+  footer{padding:26px 0 40px; color:var(--faint); font-size:12.5px; border-top:1px solid var(--line)}
+  footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap}
+</style>
+
+<header>
+  <div class="wrap bar">
+    <div class="wordmark">SOVANZA<small>AI Automation &amp; Software Development</small></div>
+    <span class="sim-pill"><span class="dot"></span>LIVE PREVIEW · RUNS IN YOUR BROWSER</span>
+  </div>
+</header>
+
+<section class="hero wrap">
+  <h1>Talk to your home. <em>Right now.</em></h1>
+  <p>This is a working preview of the assistant from your proposal — press the mic and speak, or tap a command below. The home on the right responds instantly, and the assistant <b>talks back</b>. Everything here maps to a milestone in the 5-week MVP.</p>
+</section>
+
+<main class="wrap stage">
+  <!-- Voice console -->
+  <section class="panel" aria-label="Voice assistant console">
+    <div class="panel-head"><h2>Voice Assistant</h2><span class="orb-status" id="orbStatus">idle</span></div>
+    <div class="panel-body">
+      <div class="orb-zone">
+        <div class="orb" id="orb" aria-hidden="true"></div>
+      </div>
+      <div class="mic-row">
+        <button class="mic-btn" id="micBtn" aria-pressed="false">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 15a4 4 0 0 0 4-4V6a4 4 0 1 0-8 0v5a4 4 0 0 0 4 4zm6-4a6 6 0 0 1-12 0H4a8 8 0 0 0 7 7.93V22h2v-3.07A8 8 0 0 0 20 11h-2z"/></svg>
+          <span id="micLabel">Speak</span>
+        </button>
+        <input class="say-input" id="sayInput" type="text" placeholder='…or type a command and press Enter' autocomplete="off">
+      </div>
+      <p class="mic-note" id="micNote">Push to talk. Speaking while the assistant answers interrupts it — barge-in, just like the real build.</p>
+      <div class="chips" id="chips" role="group" aria-label="Example commands"></div>
+      <div class="transcript" id="transcript" aria-live="polite"></div>
+      <div class="voice-ctrl">
+        <label>Voice
+          <select id="voiceSel" aria-label="Assistant voice"></select>
+        </label>
+        <label>Speed
+          <input type="range" id="rateSlider" min="0.7" max="1.3" step="0.05" value="1" aria-label="Speaking speed">
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <!-- Home panel -->
+  <section class="panel" aria-label="Simulated home">
+    <div class="panel-head"><h2>Your Home · Simulated</h2><span class="orb-status">Home Assistant</span></div>
+    <div class="panel-body">
+      <div class="alarm">
+        <div class="label">ADT Security<small>ARM / DISARM BY VOICE · CONFIRMATION REQUIRED</small></div>
+        <span class="state-pill disarmed" id="alarmPill">DISARMED</span>
+      </div>
+      <div class="thermo">
+        <div>
+          <div class="temp" id="thermoTemp">72<span>°F</span></div>
+        </div>
+        <div class="meta" id="thermoMeta">THERMOSTAT · HEAT<br>TARGET 72°F</div>
+      </div>
+      <div id="rooms"></div>
+    </div>
+  </section>
+</main>
+
+<section class="wrap lower">
+  <div class="panel" aria-label="Reminders">
+    <div class="panel-head"><h2>Reminders</h2><span class="orb-status">proactive · spoken aloud</span></div>
+    <div class="panel-body">
+      <div class="rem-list" id="remList"><p class="empty">None yet — try “Remind me to check the oven in 15 seconds.”</p></div>
+    </div>
+  </div>
+  <div class="panel" aria-label="Assistant memory">
+    <div class="panel-head"><h2>AI Memory</h2><span class="orb-status">view &amp; delete</span></div>
+    <div class="panel-body">
+      <div class="mem-list" id="memList"><p class="empty">Empty — try “Call the floor lamp the reading light,” then use the nickname.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="bridge">
+  <div class="wrap bridge-inner">
+    <h2>You just used a browser mock. The MVP does this with your real house.</h2>
+    <p class="lede">Everything you tried above is simulated in this page. In the 5-week build, the same commands drive your actual lights, plugs, thermostat and ADT panel through Home Assistant — with real-time voice, memory that persists, and a dashboard you own.</p>
+    <div class="miles">
+      <div class="mile"><span class="wk">WEEK 1</span><h4>Foundation</h4><p>Backend, auth, Home Assistant live on your hardware with your devices visible.</p></div>
+      <div class="mile"><span class="wk">WEEK 2</span><h4>Real-Time Voice</h4><p>Natural conversation with follow-up context, barge-in, adjustable voice &amp; speed.</p></div>
+      <div class="mile"><span class="wk">WEEK 3</span><h4>Device Control</h4><p>Every connected device by name, type or room. ADT status, arm and disarm.</p></div>
+      <div class="mile"><span class="wk">WEEK 4</span><h4>Reminders &amp; Memory</h4><p>Recurring reminders with proactive voice + push. Preferences and nicknames remembered.</p></div>
+      <div class="mile"><span class="wk">WEEK 5</span><h4>Dashboard &amp; Handover</h4><p>Web dashboard, end-to-end testing, documentation, deployed to your accounts.</p></div>
+    </div>
+    <div class="cta-row">
+      <a class="cta" href="mailto:muhammad.naeem@difference.foundation?subject=Sovanza%20Voice%20Assistant%20MVP%20—%20let%27s%20start">Start Week 1</a>
+      <p class="cta-note"><b>$4,800 · 5 weeks · $1,200 deposit to begin.</b> Hardware list with purchase links delivered on day one.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>SOVANZA — AI Real Time Voice Home Assistant · MVP Preview</span>
+    <span>This demo runs entirely in your browser. No data leaves this page.</span>
+  </div>
+</footer>
+
+<script>
+"use strict";
+/* ============================================================
+   Sovanza Voice Preview — fully client-side simulation.
+   STT: Web Speech API · TTS: speechSynthesis · NLU: rules.
+   ============================================================ */
+
+// ---------- state ----------
+const home = {
+  alarm: "disarmed",
+  thermostat: { target: 72, mode: "HEAT" },
+  devices: [
+    { id:"lr-lamp",    name:"Floor Lamp",    room:"Living Room", type:"light", icon:"🛋️", on:false, bri:100, words:["floor lamp","lamp"] },
+    { id:"lr-ceiling", name:"Ceiling Light", room:"Living Room", type:"light", icon:"💡", on:false, bri:100, words:["ceiling light","ceiling"] },
+    { id:"kit-light",  name:"Kitchen Light", room:"Kitchen",     type:"light", icon:"💡", on:false, bri:100, words:["kitchen light"] },
+    { id:"bed-light",  name:"Bedroom Light", room:"Bedroom",     type:"light", icon:"💡", on:false, bri:100, words:["bedroom light","bedroom lamp"] },
+    { id:"coffee",     name:"Coffee Maker",  room:"Kitchen",     type:"plug",  icon:"☕", on:false, words:["coffee maker","coffee machine","coffee"] },
+    { id:"tv-plug",    name:"TV Plug",       room:"Living Room", type:"plug",  icon:"📺", on:false, words:["tv","television","tv plug"] },
+  ],
+  sensors: [
+    { id:"door",   name:"Front Door",    room:"Sensors", icon:"🚪", state:"CLOSED", ok:true },
+    { id:"motion", name:"Motion Sensor", room:"Sensors", icon:"🏃", state:"CLEAR · 12 MIN AGO", ok:true },
+  ],
+};
+const nicknames = {};          // nickname -> device id
+const memories  = [];          // {id, kind:"nickname"|"fact", text, nick?}
+const reminders = [];          // {id, text, due:Date, fired}
+let pending = null;            // {type:"alarm", action} | {type:"reminder-time", text}
+let memSeq = 0, remSeq = 0;
+
+// ---------- dom ----------
+const $ = id => document.getElementById(id);
+const orb = $("orb"), orbStatus = $("orbStatus"), transcript = $("transcript");
+const micBtn = $("micBtn"), micLabel = $("micLabel"), sayInput = $("sayInput");
+
+// ---------- render: home ----------
+function renderHome(){
+  const pill = $("alarmPill");
+  pill.textContent = home.alarm.toUpperCase();
+  pill.className = "state-pill " + (home.alarm === "armed" ? "armed" : "disarmed");
+  $("thermoTemp").innerHTML = home.thermostat.target + "<span>°F</span>";
+  $("thermoMeta").innerHTML = "THERMOSTAT · " + home.thermostat.mode + "<br>TARGET " + home.thermostat.target + "°F";
+
+  const rooms = {};
+  home.devices.forEach(d => (rooms[d.room] ||= []).push(d));
+  let html = "";
+  for (const [room, devs] of Object.entries(rooms)){
+    html += `<div class="room"><h3>${room}</h3><div class="devices">`;
+    for (const d of devs){
+      const st = d.type === "light"
+        ? (d.on ? (d.bri < 100 ? `ON · ${d.bri}%` : "ON") : "OFF")
+        : (d.on ? "ON" : "OFF");
+      html += `<button class="device ${d.on ? "on":""}" data-id="${d.id}" title="Tap to toggle (dashboard-style manual control)">
+        <span class="icon">${d.icon}</span><span class="name">${d.name}</span><span class="state">${st}</span></button>`;
+    }
+    html += `</div></div>`;
+  }
+  html += `<div class="room"><h3>Sensors</h3><div class="devices">`;
+  for (const s of home.sensors){
+    html += `<div class="device sensor ${s.ok ? "" : "alert"}">
+      <span class="icon">${s.icon}</span><span class="name">${s.name}</span><span class="state">${s.state}</span></div>`;
+  }
+  html += `</div></div>`;
+  $("rooms").innerHTML = html;
+  document.querySelectorAll(".device[data-id]").forEach(el=>{
+    el.addEventListener("click", ()=>{
+      const d = home.devices.find(x=>x.id===el.dataset.id);
+      d.on = !d.on; renderHome(); flash(d.id);
+    });
+  });
+}
+function flash(id){
+  const el = document.querySelector(`.device[data-id="${id}"]`);
+  if (el){ el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
+}
+
+// ---------- render: reminders + memory ----------
+function fmtTime(d){
+  let h = d.getHours(), m = d.getMinutes(), s = d.getSeconds();
+  const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
+  return `${h}:${String(m).padStart(2,"0")}${s ? ":"+String(s).padStart(2,"0") : ""} ${ap}`;
+}
+function renderReminders(){
+  const box = $("remList");
+  if (!reminders.length){ box.innerHTML = `<p class="empty">None yet — try “Remind me to check the oven in 15 seconds.”</p>`; return; }
+  box.innerHTML = reminders.map(r =>
+    `<div class="rem ${r.fired?"fired":""}"><span class="when">${r.fired?"DONE":fmtTime(r.due)}</span>
+     <span style="flex:1">${esc(r.text)}</span>
+     <button class="del" data-rem="${r.id}" aria-label="Delete reminder">×</button></div>`).join("");
+  box.querySelectorAll("[data-rem]").forEach(b=>b.addEventListener("click",()=>{
+    const i = reminders.findIndex(r=>r.id==b.dataset.rem); if(i>-1) reminders.splice(i,1); renderReminders();
+  }));
+}
+function renderMemory(){
+  const box = $("memList");
+  if (!memories.length){ box.innerHTML = `<p class="empty">Empty — try “Call the floor lamp the reading light,” then use the nickname.</p>`; return; }
+  box.innerHTML = memories.map(m =>
+    `<div class="mem"><span class="tag">${m.kind==="nickname"?"NICKNAME":"FACT"}</span>
+     <span style="flex:1">${esc(m.text)}</span>
+     <button class="del" data-mem="${m.id}" aria-label="Forget this">×</button></div>`).join("");
+  box.querySelectorAll("[data-mem]").forEach(b=>b.addEventListener("click",()=>{
+    const i = memories.findIndex(m=>m.id==b.dataset.mem);
+    if (i>-1){ const m = memories[i]; if (m.nick) delete nicknames[m.nick]; memories.splice(i,1); }
+    renderMemory();
+  }));
+}
+function esc(s){ const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
+
+// ---------- transcript + tts ----------
+function addMsg(who, text){
+  const el = document.createElement("div");
+  el.className = "msg " + (who === "you" ? "user" : "ai");
+  el.innerHTML = `<span class="who">${who === "you" ? "You" : "Assistant"}</span>${esc(text)}`;
+  transcript.appendChild(el);
+  transcript.scrollTop = transcript.scrollHeight;
+}
+let voices = [];
+function loadVoices(){
+  voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith("en"));
+  const sel = $("voiceSel");
+  sel.innerHTML = voices.map((v,i)=>`<option value="${i}">${esc(v.name.replace(/\(.*?\)/g,"").trim())}</option>`).join("") || `<option>Default</option>`;
+  const pref = voices.findIndex(v=>/samantha|google us|zira|aria/i.test(v.name));
+  if (pref > -1) sel.value = pref;
+}
+if ("speechSynthesis" in window){
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;
+}
+function speak(text){
+  addMsg("ai", text);
+  if (!("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  const v = voices[$("voiceSel").value]; if (v) u.voice = v;
+  u.rate = parseFloat($("rateSlider").value);
+  u.onstart = ()=>setOrb("speaking");
+  u.onend = ()=>setOrb("idle");
+  speechSynthesis.speak(u);
+}
+function setOrb(state){
+  orb.className = "orb" + (state === "idle" ? "" : " " + state);
+  orbStatus.textContent = state === "listening" ? "listening…" : state === "speaking" ? "speaking" : "idle";
+}
+
+// ---------- device resolution ----------
+function resolveTargets(t){
+  // nicknames first — memory in action
+  for (const [nick, id] of Object.entries(nicknames)){
+    if (t.includes(nick)) return home.devices.filter(d => d.id === id);
+  }
+  for (const d of home.devices){
+    for (const w of d.words) if (t.includes(w)) return [d];
+  }
+  const roomHit = r => t.includes(r.toLowerCase());
+  if (roomHit("living room")) {
+    if (t.includes("light")) return home.devices.filter(d=>d.room==="Living Room" && d.type==="light");
+    return home.devices.filter(d=>d.room==="Living Room");
+  }
+  if (roomHit("kitchen"))  return home.devices.filter(d=>d.room==="Kitchen"  && (t.includes("light") ? d.type==="light" : true));
+  if (roomHit("bedroom"))  return home.devices.filter(d=>d.room==="Bedroom");
+  if (/\b(all|every|the)\s+lights?\b/.test(t) || /\blights?\b/.test(t))
+    return home.devices.filter(d=>d.type==="light");
+  if (/\beverything\b/.test(t)) return home.devices.slice();
+  return [];
+}
+function nameList(devs){
+  const names = devs.map(d=>d.name);
+  return names.length <= 1 ? names.join("") :
+    names.slice(0,-1).join(", ") + " and " + names[names.length-1];
+}
+
+// ---------- reminder time parsing ----------
+const NUMWORDS = {a:1,an:1,one:1,two:2,three:3,four:4,five:5,ten:10,fifteen:15,twenty:20,thirty:30};
+function parseWhen(t){
+  let m = t.match(/\bin\s+(\d+|a|an|one|two|three|four|five|ten|fifteen|twenty|thirty)\s+(second|minute|hour)s?\b/);
+  if (m){
+    const n = NUMWORDS[m[1]] ?? parseInt(m[1],10);
+    const ms = {second:1e3, minute:6e4, hour:36e5}[m[2]] * n;
+    return { due: new Date(Date.now()+ms), phrase: `in ${n} ${m[2]}${n>1?"s":""}`, strip: m[0] };
+  }
+  m = t.match(/\bat\s+(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?\b/);
+  if (m){
+    let h = parseInt(m[1],10); const min = m[2] ? parseInt(m[2],10) : 0;
+    const ap = m[3] ? m[3][0].toLowerCase() : null;
+    if (ap === "p" && h < 12) h += 12;
+    if (ap === "a" && h === 12) h = 0;
+    const d = new Date(); d.setHours(h, min, 0, 0);
+    if (!ap && d < new Date() && h < 12){ d.setHours(h+12); h += 12; } // assume next occurrence
+    if (d < new Date()) d.setDate(d.getDate()+1);
+    return { due: d, phrase: "at " + fmtTime(d), strip: m[0] };
+  }
+  return null;
+}
+function addReminder(text, when){
+  reminders.push({ id: ++remSeq, text, due: when.due, fired: false });
+  reminders.sort((a,b)=>a.due-b.due);
+  renderReminders();
+  speak(`Okay — I'll remind you to ${text} ${when.phrase}. I'll say it out loud and highlight it here.`);
+}
+setInterval(()=>{
+  const now = Date.now();
+  for (const r of reminders){
+    if (!r.fired && r.due.getTime() <= now){
+      r.fired = true; renderReminders(); chime();
+      speak(`Reminder: ${r.text}.`);
+    }
+  }
+}, 1000);
+function chime(){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = 880; g.gain.setValueAtTime(.12, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.0001, ctx.currentTime+.7);
+    o.start(); o.stop(ctx.currentTime+.7);
+  }catch(e){}
+}
+
+// ---------- NLU ----------
+function handle(raw){
+  const said = raw.trim();
+  if (!said) return;
+  addMsg("you", said);
+  const t = said.toLowerCase().replace(/[?!.]+$/,"");
+
+  // -- pending confirmation (sensitive actions) --
+  if (pending && pending.type === "alarm"){
+    if (/^(yes|yeah|yep|confirm|do it|sure|go ahead)/.test(t)){
+      home.alarm = pending.action; pending = null; renderHome();
+      speak(home.alarm === "armed"
+        ? "The alarm is now armed. In the real build this talks to your ADT panel."
+        : "The alarm is disarmed.");
+      return;
+    }
+    if (/^(no|nope|cancel|stop|never mind|nevermind)/.test(t)){
+      pending = null; speak("Cancelled — the alarm hasn't been touched."); return;
+    }
+  }
+  // -- pending reminder time (follow-up context) --
+  if (pending && pending.type === "reminder-time"){
+    const when = parseWhen(t) || parseWhen("in " + t) || parseWhen("at " + t);
+    if (when){ const text = pending.text; pending = null; addReminder(text, when); return; }
+    pending = null; // fall through and treat as a fresh command
+  }
+
+  // -- alarm --
+  let m;
+  if (/\b(arm|activate|turn on)\b.*\b(alarm|security|adt)\b|\badt\b.*\barm\b/.test(t) && !/\bdisarm\b/.test(t)){
+    if (home.alarm === "armed") return speak("The alarm is already armed.");
+    pending = { type:"alarm", action:"armed" };
+    return speak("Arming security is a sensitive action, so I always confirm first. Arm the ADT system — yes or no?");
+  }
+  if (/\b(disarm|deactivate|turn off)\b.*\b(alarm|security|adt)\b/.test(t)){
+    if (home.alarm === "disarmed") return speak("The alarm is already disarmed.");
+    pending = { type:"alarm", action:"disarmed" };
+    return speak("Just to confirm — disarm the security system?");
+  }
+  if (/\b(alarm|security|adt)\b.*\b(status|state|on|armed)\b|\bis the (alarm|security)\b/.test(t)){
+    return speak(`The ADT system is currently ${home.alarm}. Front door reads closed and there's no recent motion.`);
+  }
+
+  // -- reminders --
+  if ((m = t.match(/\bremind me\s+(?:to\s+)?(.+)/))){
+    let body = m[1];
+    const when = parseWhen(body);
+    if (when){
+      body = body.replace(when.strip, "").replace(/\s{2,}/g," ").trim().replace(/^to\s+/,"");
+      return addReminder(body || "your reminder", when);
+    }
+    pending = { type:"reminder-time", text: body.trim() };
+    return speak(`Sure — remind you to ${body.trim()}. For when?`);
+  }
+  if (/\b(what|list|any|show).*(reminders?)\b|\breminders\b$/.test(t)){
+    const up = reminders.filter(r=>!r.fired);
+    if (!up.length) return speak("You have no upcoming reminders.");
+    return speak(`You have ${up.length} reminder${up.length>1?"s":""}: ` +
+      up.map(r=>`${r.text} at ${fmtTime(r.due)}`).join("; ") + ".");
+  }
+
+  // -- memory: nicknames --
+  if ((m = t.match(/\bcall (?:the )?(.+?) (?:the|a|my) (.+)$/)) ||
+      (m = t.match(/\bnickname (?:the )?(.+?) (?:as|to) (?:the )?(.+)$/))){
+    const targets = resolveTargets(m[1]);
+    if (targets.length === 1){
+      const nick = m[2].trim();
+      nicknames[nick] = targets[0].id;
+      memories.push({ id:++memSeq, kind:"nickname", nick, text:`“${nick}” means the ${targets[0].name} (${targets[0].room})` });
+      renderMemory();
+      return speak(`Got it. From now on, “${nick}” means the ${targets[0].name}. Try it.`);
+    }
+    return speak("Which device should I nickname? Try “call the floor lamp the reading light.”");
+  }
+  // -- memory: facts --
+  if ((m = t.match(/\bremember (?:that )?(.+)/))){
+    memories.push({ id:++memSeq, kind:"fact", text: m[1] });
+    renderMemory();
+    return speak("Noted. I'll keep that in memory — you can see and delete everything I know in the memory panel.");
+  }
+  if (/\bwhat do you (remember|know)( about me)?\b/.test(t)){
+    if (!memories.length) return speak("Nothing yet. Tell me something to remember, or give a device a nickname.");
+    return speak("Here's what I have: " + memories.map(x=>x.text).join("; ") + ".");
+  }
+
+  // -- thermostat --
+  if ((m = t.match(/\b(?:set|change|make|turn)\b.*\b(?:thermostat|temperature|heat|ac)\b.*?(\d{2})\b/)) ||
+      (m = t.match(/\b(?:thermostat|temperature)\b.*\bto\s+(\d{2})\b/))){
+    const v = parseInt(m[1],10);
+    if (v < 55 || v > 85) return speak(`${v} degrees is outside the safe range I'll set — pick something between 55 and 85.`);
+    home.thermostat.target = v; renderHome();
+    return speak(`Thermostat set to ${v} degrees.`);
+  }
+  if (/\bwhat(?:'s| is)? the temperature\b|\bhow (warm|cold|hot)\b/.test(t)){
+    return speak(`It's ${home.thermostat.target} degrees inside, with the thermostat targeting ${home.thermostat.target} in ${home.thermostat.mode.toLowerCase()} mode.`);
+  }
+  if (/\b(warmer|colder|cooler)\b/.test(t)){
+    home.thermostat.target += /warmer/.test(t) ? 2 : -2; renderHome();
+    return speak(`Done — target is now ${home.thermostat.target} degrees.`);
+  }
+
+  // -- sensor queries --
+  if (/\bis the (front )?door (open|closed|locked|shut)\b|\bfront door\b/.test(t)){
+    return speak("The front door is closed. It's been closed since 4:10 this afternoon.");
+  }
+  if (/\bmotion\b|\banyone (home|there|moving)\b/.test(t)){
+    return speak("No motion detected. The last movement was in the hallway, twelve minutes ago.");
+  }
+
+  // -- light status --
+  if (/\b(which|what|any)\b.*\blights?\b.*\b(on|off)\b/.test(t)){
+    const on = home.devices.filter(d=>d.type==="light" && d.on);
+    return speak(on.length ? `${on.length} light${on.length>1?"s are":" is"} on: ${nameList(on)}.` : "All the lights are off.");
+  }
+
+  // -- brightness / dim --
+  if ((m = t.match(/\b(?:dim|set|make)\b.*?(?:to\s+)?(\d{1,3})\s*(?:percent|%)/)) || /\bdim\b/.test(t)){
+    const targets = resolveTargets(t).filter(d=>d.type==="light");
+    if (!targets.length) return speak("Which light should I dim?");
+    const pct = m ? Math.min(100, Math.max(1, parseInt(m[1],10))) : 30;
+    targets.forEach(d=>{ d.on = true; d.bri = pct; flash(d.id); });
+    renderHome(); targets.forEach(d=>flash(d.id));
+    return speak(`${nameList(targets)} set to ${pct} percent.`);
+  }
+
+  // -- on / off --
+  const wantsOff = /\b(off|out)\b/.test(t) && !/\bturn on\b/.test(t);
+  const wantsOn  = /\bturn on\b|\bswitch on\b|\b(on)\b$/.test(t) || (/\bon\b/.test(t) && !wantsOff);
+  if (/\bturn|switch|lights?|power|start|shut\b/.test(t) && (wantsOn || wantsOff)){
+    const targets = resolveTargets(t);
+    if (targets.length){
+      const turnOn = wantsOff ? false : true;
+      targets.forEach(d=>{ d.on = turnOn; if (d.type==="light" && turnOn && !d.bri) d.bri = 100; });
+      renderHome(); targets.forEach(d=>flash(d.id));
+      return speak(`${nameList(targets)} ${targets.length>1?"are":"is"} ${turnOn?"on":"off"}.`);
+    }
+    return speak("I couldn't find that device. Try a room — like “turn on the kitchen light.”");
+  }
+
+  // -- greetings / help --
+  if (/^(hi|hello|hey|good (morning|evening|afternoon))\b/.test(t)){
+    return speak("Hi! I can control lights and plugs, set the thermostat, arm the alarm, set reminders, and remember things. What should we try first?");
+  }
+  if (/\bwhat can you do\b|\bhelp\b/.test(t)){
+    return speak("Try: turn on the living room lights. Set the thermostat to 68. Is the front door open? Arm the alarm. Remind me to call John in 20 seconds. Or — call the floor lamp the reading light.");
+  }
+
+  speak("This preview understands a focused set of commands — the real assistant uses a full language model, so it handles anything you'd naturally say. Try one of the suggestion chips below the mic.");
+}
+
+// ---------- chips ----------
+const CHIPS = [
+  "Turn on the living room lights",
+  "Dim the floor lamp to 30%",
+  "Set the thermostat to 68",
+  "Is the front door open?",
+  "Arm the alarm",
+  "Remind me to check the oven in 15 seconds",
+  "Call the floor lamp the reading light",
+  "Turn on the reading light",
+  "What do you remember?",
+];
+$("chips").innerHTML = CHIPS.map(c=>`<button class="chip">${c}</button>`).join("");
+document.querySelectorAll(".chip").forEach(b=>b.addEventListener("click",()=>{
+  speechSynthesis.cancel(); handle(b.textContent);
+}));
+
+// ---------- text input ----------
+sayInput.addEventListener("keydown", e=>{
+  if (e.key === "Enter" && sayInput.value.trim()){
+    speechSynthesis.cancel();
+    handle(sayInput.value); sayInput.value = "";
+  }
+});
+
+// ---------- speech recognition ----------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, listening = false;
+if (SR){
+  rec = new SR();
+  rec.lang = "en-US"; rec.interimResults = true; rec.continuous = false;
+  rec.onresult = e=>{
+    let interim = "", final = "";
+    for (const r of e.results) (r.isFinal ? final += r[0].transcript : interim += r[0].transcript);
+    sayInput.value = interim || final;
+    if (final){ sayInput.value = ""; handle(final); }
+  };
+  rec.onend = ()=>{ listening = false; micBtn.classList.remove("live"); micBtn.setAttribute("aria-pressed","false"); micLabel.textContent = "Speak"; if (orbStatus.textContent === "listening…") setOrb("idle"); };
+  rec.onerror = e=>{
+    if (e.error === "not-allowed" || e.error === "service-not-allowed"){
+      $("micNote").textContent = "Microphone access was blocked — no problem, type commands or tap the chips instead.";
+    }
+  };
+} else {
+  micBtn.style.display = "none";
+  $("micNote").textContent = "Voice input isn't supported in this browser — type a command or tap a chip. (Chrome, Edge and Safari support the mic.)";
+}
+micBtn.addEventListener("click", ()=>{
+  if (!rec) return;
+  if (listening){ rec.stop(); return; }
+  speechSynthesis.cancel();                    // barge-in
+  try{ rec.start(); }catch(e){ return; }
+  listening = true;
+  micBtn.classList.add("live"); micBtn.setAttribute("aria-pressed","true");
+  micLabel.textContent = "Listening…";
+  setOrb("listening");
+});
+
+// ---------- boot ----------
+renderHome(); renderReminders(); renderMemory();
+setTimeout(()=>{
+  addMsg("ai", "Hi — I'm the Sovanza home assistant preview. Press Speak and say “turn on the living room lights,” or tap any suggestion below.");
+}, 400);
+</script>
