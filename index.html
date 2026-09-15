@@ -107,6 +107,16 @@
   }
   .say-input::placeholder{color:var(--faint)}
   .mic-note{font-size:12.5px; color:var(--faint); margin-top:8px}
+  .wake-row{display:flex; align-items:center; gap:10px; margin-top:12px}
+  .wake-switch{position:relative; width:40px; height:22px; flex:none; cursor:pointer}
+  .wake-switch input{position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer}
+  .wake-track{position:absolute; inset:0; background:var(--inset); border:1px solid var(--line); border-radius:999px; transition:background .2s ease, border-color .2s ease; pointer-events:none}
+  .wake-thumb{position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:var(--faint); transition:transform .2s ease, background .2s ease; pointer-events:none}
+  .wake-switch input:checked ~ .wake-track{background:rgba(65,196,210,.2); border-color:var(--teal-deep)}
+  .wake-switch input:checked ~ .wake-thumb{transform:translateX(18px); background:var(--teal)}
+  .wake-switch input:focus-visible ~ .wake-track{outline:2px solid var(--teal); outline-offset:2px}
+  .wake-label{font-size:13.5px; color:var(--muted); cursor:pointer}
+  .wake-label b{color:var(--ink); font-weight:500}
 
   .chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px}
   .chip{
@@ -223,13 +233,13 @@
 
 <section class="hero wrap">
   <h1>Talk to your home. <em>Right now.</em></h1>
-  <p>This is a working preview of the assistant from your proposal — press the mic and speak, or tap a command below. The home on the right responds instantly, and the assistant <b>talks back</b>. Everything here maps to a milestone in the 5-week MVP.</p>
+  <p>This is a working preview of the assistant from your proposal. Meet <b>Anna</b> — press the mic and speak, turn on hands-free and say <b>“Hi Anna”</b>, or tap a command below. The home on the right responds instantly, and Anna <b>talks back</b>. Everything here maps to a milestone in the 5-week MVP.</p>
 </section>
 
 <main class="wrap stage">
   <!-- Voice console -->
   <section class="panel" aria-label="Voice assistant console">
-    <div class="panel-head"><h2>Voice Assistant</h2><span class="orb-status" id="orbStatus">idle</span></div>
+    <div class="panel-head"><h2>Anna — Voice Assistant</h2><span class="orb-status" id="orbStatus">idle</span></div>
     <div class="panel-body">
       <div class="orb-zone">
         <div class="orb" id="orb" aria-hidden="true"></div>
@@ -241,7 +251,15 @@
         </button>
         <input class="say-input" id="sayInput" type="text" placeholder='…or type a command and press Enter' autocomplete="off">
       </div>
-      <p class="mic-note" id="micNote">Push to talk. Speaking while the assistant answers interrupts it — barge-in, just like the real build.</p>
+      <p class="mic-note" id="micNote">Push to talk. Speaking while Anna answers interrupts her — barge-in, just like the real build.</p>
+      <div class="wake-row" id="wakeRow">
+        <span class="wake-switch">
+          <input type="checkbox" id="wakeChk" aria-labelledby="wakeLbl">
+          <span class="wake-track" aria-hidden="true"></span>
+          <span class="wake-thumb" aria-hidden="true"></span>
+        </span>
+        <label class="wake-label" id="wakeLbl" for="wakeChk">Hands-free — just say <b>“Hi Anna”</b>, no button needed</label>
+      </div>
       <div class="chips" id="chips" role="group" aria-label="Example commands"></div>
       <div class="transcript" id="transcript" aria-live="polite"></div>
       <div class="voice-ctrl">
@@ -426,31 +444,46 @@ function esc(s){ const d=document.createElement("div"); d.textContent=s; return 
 function addMsg(who, text){
   const el = document.createElement("div");
   el.className = "msg " + (who === "you" ? "user" : "ai");
-  el.innerHTML = `<span class="who">${who === "you" ? "You" : "Assistant"}</span>${esc(text)}`;
+  el.innerHTML = `<span class="who">${who === "you" ? "You" : "Anna"}</span>${esc(text)}`;
   transcript.appendChild(el);
   transcript.scrollTop = transcript.scrollHeight;
 }
 let voices = [];
 function loadVoices(){
-  voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith("en"));
+  // Local (on-device) voices first: network voices stream audio from the
+  // vendor's servers and stutter between chunks on slow connections.
+  voices = speechSynthesis.getVoices()
+    .filter(v => v.lang.startsWith("en"))
+    .sort((a,b)=>(b.localService?1:0)-(a.localService?1:0));
   const sel = $("voiceSel");
-  sel.innerHTML = voices.map((v,i)=>`<option value="${i}">${esc(v.name.replace(/\(.*?\)/g,"").trim())}</option>`).join("") || `<option>Default</option>`;
-  const pref = voices.findIndex(v=>/samantha|google us|zira|aria/i.test(v.name));
+  sel.innerHTML = voices.map((v,i)=>
+    `<option value="${i}">${esc(v.name.replace(/\(.*?\)/g,"").trim())}${v.localService?"":" · network"}</option>`
+  ).join("") || `<option>Default</option>`;
+  let pref = voices.findIndex(v=>v.localService && /samantha|karen|daniel|zira|aria|david|mark|susan/i.test(v.name));
+  if (pref === -1) pref = voices.findIndex(v=>v.localService);
   if (pref > -1) sel.value = pref;
 }
 if ("speechSynthesis" in window){
   loadVoices();
   speechSynthesis.onvoiceschanged = loadVoices;
 }
+let currentUtterance = null, ttsKeepalive = null; // refs prevent Chrome GC cutting speech
 function speak(text){
   addMsg("ai", text);
   if (!("speechSynthesis" in window)) return;
   speechSynthesis.cancel();
+  clearInterval(ttsKeepalive);
   const u = new SpeechSynthesisUtterance(text);
+  currentUtterance = u;
   const v = voices[$("voiceSel").value]; if (v) u.voice = v;
   u.rate = parseFloat($("rateSlider").value);
-  u.onstart = ()=>setOrb("speaking");
-  u.onend = ()=>setOrb("idle");
+  u.onstart = ()=>{
+    setOrb("speaking");
+    // Chrome silently pauses remote-voice speech mid-utterance; resume() un-sticks it.
+    ttsKeepalive = setInterval(()=>{ if (speechSynthesis.speaking) speechSynthesis.resume(); }, 3000);
+  };
+  const done = ()=>{ clearInterval(ttsKeepalive); awaitingCommand ? setOrb("listening") : idleOrb(); };
+  u.onend = done; u.onerror = done;
   speechSynthesis.speak(u);
 }
 function setOrb(state){
@@ -674,7 +707,7 @@ function handle(raw){
 
   // -- greetings / help --
   if (/^(hi|hello|hey|good (morning|evening|afternoon))\b/.test(t)){
-    return speak("Hi! I can control lights and plugs, set the thermostat, arm the alarm, set reminders, and remember things. What should we try first?");
+    return speak("Hi! I'm Anna. I can control lights and plugs, set the thermostat, arm the alarm, set reminders, and remember things. What should we try first?");
   }
   if (/\bwhat can you do\b|\bhelp\b/.test(t)){
     return speak("Try: turn on the living room lights. Set the thermostat to 68. Is the front door open? Arm the alarm. Remind me to call John in 20 seconds. Or — call the floor lamp the reading light.");
@@ -710,30 +743,95 @@ sayInput.addEventListener("keydown", e=>{
 
 // ---------- speech recognition ----------
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null, listening = false;
+// Recognition often mishears "Anna" — accept close variants.
+const WAKE_RE = /\b(?:hi|hey|hello|ok|okay)?[\s,]*(?:anna|ana|hannah|ohana|onna)\b[\s,]*/i;
+let rec = null, listening = false;   // manual push-to-talk session
+let wakeMode = false;                // hands-free listening enabled
+let awaitingCommand = false;         // woken up, waiting for the command
+let awaitTimer = null;
+
+function setAwaiting(on){
+  clearTimeout(awaitTimer);
+  awaitingCommand = on;
+  if (on){
+    setOrb("listening");
+    awaitTimer = setTimeout(()=>{     // give up after 12s of silence
+      awaitingCommand = false;
+      if (wakeMode && !speechSynthesis.speaking) idleOrb();
+    }, 12000);
+  }
+}
+function idleOrb(){
+  setOrb("idle");
+  if (wakeMode) orbStatus.textContent = "say “hi anna”";
+}
+function micBlocked(){
+  $("micNote").textContent = "Microphone access was blocked — no problem, type commands or tap the chips instead.";
+  const chk = $("wakeChk"); if (chk){ chk.checked = false; } wakeMode = false;
+}
+
 if (SR){
   rec = new SR();
   rec.lang = "en-US"; rec.interimResults = true; rec.continuous = false;
   rec.onresult = e=>{
+    if (speechSynthesis.speaking) return;      // don't transcribe Anna's own voice
     let interim = "", final = "";
-    for (const r of e.results) (r.isFinal ? final += r[0].transcript : interim += r[0].transcript);
-    sayInput.value = interim || final;
-    if (final){ sayInput.value = ""; handle(final); }
-  };
-  rec.onend = ()=>{ listening = false; micBtn.classList.remove("live"); micBtn.setAttribute("aria-pressed","false"); micLabel.textContent = "Speak"; if (orbStatus.textContent === "listening…") setOrb("idle"); };
-  rec.onerror = e=>{
-    if (e.error === "not-allowed" || e.error === "service-not-allowed"){
-      $("micNote").textContent = "Microphone access was blocked — no problem, type commands or tap the chips instead.";
+    for (let i = e.resultIndex; i < e.results.length; i++){   // only new results — continuous sessions accumulate
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += t; else interim += t;
     }
+    if (listening || awaitingCommand) sayInput.value = interim || final;
+    if (!final) return;
+    final = final.trim();
+    sayInput.value = "";
+    if (listening || awaitingCommand){         // active command window
+      setAwaiting(false);
+      handle(final);
+      if (!wakeMode && listening) rec.stop();
+      return;
+    }
+    if (wakeMode){                              // passive: scan for the wake word
+      const m = final.match(WAKE_RE);
+      if (!m) return;
+      const command = final.slice(m.index + m[0].length).trim();
+      speechSynthesis.cancel();                 // barge-in on wake
+      if (command.split(/\s+/).filter(Boolean).length >= 2){
+        handle(command);                        // "hi anna turn on the lights"
+      } else {
+        chime();
+        setAwaiting(true);
+        speak("Yes?");
+      }
+    }
+  };
+  rec.onend = ()=>{
+    listening = false;
+    micBtn.classList.remove("live"); micBtn.setAttribute("aria-pressed","false");
+    micLabel.textContent = "Speak";
+    if (wakeMode){                              // keep the ear open — Chrome stops sessions periodically
+      setTimeout(()=>{ if (wakeMode){ try{ rec.start(); }catch(e){} } }, 300);
+    } else if (orbStatus.textContent === "listening…" || orbStatus.textContent === "say “hi anna”"){
+      setOrb("idle");
+    }
+  };
+  rec.onerror = e=>{
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") micBlocked();
   };
 } else {
   micBtn.style.display = "none";
+  const wr = $("wakeRow"); if (wr) wr.style.display = "none";
   $("micNote").textContent = "Voice input isn't supported in this browser — type a command or tap a chip. (Chrome, Edge and Safari support the mic.)";
 }
+
 micBtn.addEventListener("click", ()=>{
   if (!rec) return;
+  speechSynthesis.cancel();                     // barge-in
+  if (wakeMode){                                // already listening — open a command window
+    setAwaiting(true);
+    return;
+  }
   if (listening){ rec.stop(); return; }
-  speechSynthesis.cancel();                    // barge-in
+  rec.continuous = false;
   try{ rec.start(); }catch(e){ return; }
   listening = true;
   micBtn.classList.add("live"); micBtn.setAttribute("aria-pressed","true");
@@ -741,9 +839,27 @@ micBtn.addEventListener("click", ()=>{
   setOrb("listening");
 });
 
+$("wakeChk").addEventListener("change", e=>{
+  if (!rec) return;
+  wakeMode = e.target.checked;
+  setAwaiting(false);
+  try{ rec.stop(); }catch(err){}
+  if (wakeMode){
+    rec.continuous = true;
+    setTimeout(()=>{
+      try{ rec.start(); }catch(err){}
+      idleOrb();
+      speak("Hands-free is on. Say — hi Anna — whenever you need me.");
+    }, 350);
+  } else {
+    rec.continuous = false;
+    setOrb("idle");
+  }
+});
+
 // ---------- boot ----------
 renderHome(); renderReminders(); renderMemory();
 setTimeout(()=>{
-  addMsg("ai", "Hi — I'm the Sovanza home assistant preview. Press Speak and say “turn on the living room lights,” or tap any suggestion below.");
+  addMsg("ai", "Hi — I'm Anna, your Sovanza home assistant. Press Speak, or flip on hands-free and just say “Hi Anna, turn on the living room lights.”");
 }, 400);
 </script>
