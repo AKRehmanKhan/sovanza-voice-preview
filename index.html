@@ -461,11 +461,14 @@ function speak(text){
   currentUtterance = u;
   if (chosenVoice) u.voice = chosenVoice;
   u.rate = 1;
-  annaSpeaking = true;
-  // failsafe: even if onend never fires, un-deafen the mic after the estimated duration
-  speakGuard = setTimeout(speechDone, Math.min(2500 + text.length * 90, 20000));
   u.onstart = ()=>{
+    // Flag only once audio actually plays — if the browser blocks or delays TTS,
+    // the mic must NOT go deaf waiting for sound that never comes.
+    annaSpeaking = true;
     setOrb("speaking");
+    // failsafe: even if onend never fires, un-deafen the mic after the estimated duration
+    clearTimeout(speakGuard);
+    speakGuard = setTimeout(speechDone, Math.min(2500 + text.length * 90, 20000));
     // Chrome silently pauses remote-voice speech mid-utterance; resume() un-sticks it.
     ttsKeepalive = setInterval(()=>{ if (speechSynthesis.speaking) speechSynthesis.resume(); }, 3000);
   };
@@ -738,7 +741,7 @@ sayInput.addEventListener("keydown", e=>{
 // ---------- speech recognition: always-on, wake word "Hi Anna" ----------
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 // Recognition often mishears "Anna" — accept close variants.
-const WAKE_RE = /\b(?:hi|hey|hello|ok|okay)?[\s,]*(?:anna|ana|hannah|ohana|onna)\b[\s,]*/i;
+const WAKE_RE = /\b(?:hi|hey|hello|ok|okay)?[\s,]*(?:anna|ana|hannah|hana|ohana|onna|iana)\b[\s,]*/i;
 let rec = null;
 let micOn = false;           // user wants the mic listening
 let recActive = false;       // a recognition session is currently running
@@ -760,6 +763,21 @@ function idleOrb(){
   setOrb("idle");
   if (micOn) orbStatus.textContent = "listening for “hi anna”";
 }
+let heardTimer = null;
+function showHeard(txt){
+  orbStatus.textContent = "heard: “" + (txt.length > 30 ? txt.slice(0,30) + "…" : txt) + "”";
+  clearTimeout(heardTimer);
+  heardTimer = setTimeout(()=>{ if (!annaSpeaking && !awaitingCommand) idleOrb(); }, 2500);
+}
+// Chrome blocks text-to-speech until the page has had one user gesture —
+// prime it on the first click/keypress so Anna's voice is never silently dropped.
+const unlockTTS = ()=>{
+  try{ const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); }catch(e){}
+  document.removeEventListener("pointerdown", unlockTTS);
+  document.removeEventListener("keydown", unlockTTS);
+};
+document.addEventListener("pointerdown", unlockTTS);
+document.addEventListener("keydown", unlockTTS);
 function refreshMicUI(){
   if (!rec) return;
   micBtn.classList.toggle("live", micOn);
@@ -792,6 +810,8 @@ if (SR){
       if (WAKE_RE.test(final || interim)) shutUp();
       else return;
     }
+    const heardTxt = (final || interim).trim();
+    if (heardTxt && !awaitingCommand) showHeard(heardTxt);   // live proof the mic hears you
     if (awaitingCommand) sayInput.value = interim || final;
     if (!final) return;
     final = final.trim();
