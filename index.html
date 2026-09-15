@@ -741,12 +741,14 @@ sayInput.addEventListener("keydown", e=>{
 // ---------- speech recognition: always-on, wake word "Hi Anna" ----------
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 // Recognition often mishears "Anna" — accept close variants.
-const WAKE_RE = /\b(?:hi|hey|hello|ok|okay)?[\s,]*(?:anna|ana|hannah|hana|ohana|onna|iana)\b[\s,]*/i;
+const WAKE_RE = /\b(?:hi|hey|hello|ok|okay)?[\s,]*(?:anna|ana|ann|hannah|hana|ohana|onna|iana|hianna|hyundai)\b[\s,]*/i;
 let rec = null;
 let micOn = false;           // user wants the mic listening
 let recActive = false;       // a recognition session is currently running
 let awaitingCommand = false; // woken by name, waiting for the command
 let awaitTimer = null;
+let wakePrimed = false;      // wake word spotted in an interim result
+let primeTimer = null;
 
 function setAwaiting(on){
   clearTimeout(awaitTimer);
@@ -786,8 +788,10 @@ function refreshMicUI(){
 }
 function startListening(){
   if (!rec || !micOn || recActive) return;
-  try{ rec.start(); }catch(e){}
+  try{ rec.start(); }catch(e){ setTimeout(startListening, 150); }
 }
+// Watchdog: whatever kills the session, the ear reopens within 2 seconds.
+setInterval(()=>{ if (rec && micOn && !recActive) startListening(); }, 2000);
 function enableMic(){
   if (!rec || micOn) return;
   micOn = true;
@@ -813,17 +817,32 @@ if (SR){
     const heardTxt = (final || interim).trim();
     if (heardTxt && !awaitingCommand) showHeard(heardTxt);   // live proof the mic hears you
     if (awaitingCommand) sayInput.value = interim || final;
-    if (!final) return;
     final = final.trim();
+    // Prime instantly on the wake word in INTERIM results — finals often rewrite
+    // the name away ("Diana", "Hyundai"), and the chime tells the user she woke.
+    if (!final){
+      if (!awaitingCommand && !wakePrimed && WAKE_RE.test(interim)){
+        wakePrimed = true;
+        chime();
+        setOrb("listening");
+        clearTimeout(primeTimer);
+        primeTimer = setTimeout(()=>{
+          wakePrimed = false;
+          if (!awaitingCommand && !annaSpeaking) idleOrb();
+        }, 8000);
+      }
+      return;
+    }
     if (awaitingCommand){                       // command window is open
       sayInput.value = "";
       setAwaiting(false);
       handle(final);
       return;
     }
-    const m = final.match(WAKE_RE);             // passive: scan for the wake word
-    if (!m) return;
-    const command = final.slice(m.index + m[0].length).trim();
+    const m = final.match(WAKE_RE);             // passive: wake word in the final…
+    if (!m && !wakePrimed) return;              // …or already primed by an interim
+    const command = (m ? final.slice(m.index + m[0].length) : final).trim();
+    wakePrimed = false; clearTimeout(primeTimer);
     shutUp();                                   // barge-in on wake
     if (command.split(/\s+/).filter(Boolean).length >= 2){
       handle(command);                          // "hi anna turn on the lights"
@@ -836,7 +855,7 @@ if (SR){
   // Browsers end recognition sessions on silence — restart immediately, forever.
   rec.onend = ()=>{
     recActive = false;
-    if (micOn) setTimeout(startListening, 250);
+    if (micOn) startListening();
     else refreshMicUI();
   };
   rec.onerror = e=>{
