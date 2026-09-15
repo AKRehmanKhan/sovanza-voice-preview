@@ -425,8 +425,13 @@ function pickVoice(){
   const all = speechSynthesis.getVoices().filter(v => v.lang.startsWith("en"));
   const rank = v => {
     const n = v.name.toLowerCase();
+    // Neural voices first (Edge "... Online (Natural)"), then Chrome's Google
+    // voice — both far less robotic than legacy local voices.
+    if (n.includes("natural") && /aria|jenny|michelle|emma|ava|sonia|libby|clara/.test(n)) return 0;
+    if (n.includes("natural")) return 1;
+    if (n.includes("google us english")) return 2;
     const i = FEMALE.findIndex(f => n.includes(f));
-    return (v.localService ? 0 : 100) + (i === -1 ? 60 : i);
+    return 5 + (i === -1 ? 40 : i) + (v.localService ? 0 : 20);
   };
   chosenVoice = all.sort((a,b) => rank(a) - rank(b))[0] || null;
 }
@@ -511,7 +516,7 @@ function addReminder(text, when){
   reminders.push({ id: ++remSeq, text, due: when.due, fired: false });
   reminders.sort((a,b)=>a.due-b.due);
   renderReminders();
-  speak(`Okay — I'll remind you to ${text} ${when.phrase}. I'll say it out loud and highlight it here.`);
+  speak(`Okay — I'll remind you to ${text} ${when.phrase}.`);
 }
 setInterval(()=>{
   const now = Date.now();
@@ -544,13 +549,11 @@ function handle(raw){
   if (pending && pending.type === "alarm"){
     if (/^(yes|yeah|yep|confirm|do it|sure|go ahead)/.test(t)){
       home.alarm = pending.action; pending = null; renderHome();
-      speak(home.alarm === "armed"
-        ? "The alarm is now armed. In the real build this talks to your ADT panel."
-        : "The alarm is disarmed.");
+      speak(home.alarm === "armed" ? "The alarm is armed." : "The alarm is disarmed.");
       return;
     }
     if (/^(no|nope|cancel|stop|never mind|nevermind)/.test(t)){
-      pending = null; speak("Cancelled — the alarm hasn't been touched."); return;
+      pending = null; speak("Cancelled."); return;
     }
   }
   // -- pending reminder time (follow-up context) --
@@ -565,7 +568,7 @@ function handle(raw){
   if (/\b(arm|activate|turn on)\b.*\b(alarm|security|adt)\b|\badt\b.*\barm\b/.test(t) && !/\bdisarm\b/.test(t)){
     if (home.alarm === "armed") return speak("The alarm is already armed.");
     pending = { type:"alarm", action:"armed" };
-    return speak("Arming security is a sensitive action, so I always confirm first. Arm the ADT system — yes or no?");
+    return speak("Just to confirm — arm the security system?");
   }
   if (/\b(disarm|deactivate|turn off)\b.*\b(alarm|security|adt)\b/.test(t)){
     if (home.alarm === "disarmed") return speak("The alarm is already disarmed.");
@@ -573,7 +576,7 @@ function handle(raw){
     return speak("Just to confirm — disarm the security system?");
   }
   if (/\b(alarm|security|adt)\b.*\b(status|state|on|armed)\b|\bis the (alarm|security)\b/.test(t)){
-    return speak(`The ADT system is currently ${home.alarm}. Front door reads closed and there's no recent motion.`);
+    return speak(`The alarm is ${home.alarm}.`);
   }
 
   // -- reminders --
@@ -603,7 +606,7 @@ function handle(raw){
       nicknames[nick] = targets[0].id;
       memories.push({ id:++memSeq, kind:"nickname", nick, text:`“${nick}” means the ${targets[0].name} (${targets[0].room})` });
       renderMemory();
-      return speak(`Got it. From now on, “${nick}” means the ${targets[0].name}. Try it.`);
+      return speak(`Got it — “${nick}” is the ${targets[0].name}.`);
     }
     return speak("Which device should I nickname? Try “call the floor lamp the reading light.”");
   }
@@ -611,7 +614,7 @@ function handle(raw){
   if ((m = t.match(/\bremember (?:that )?(.+)/))){
     memories.push({ id:++memSeq, kind:"fact", text: m[1] });
     renderMemory();
-    return speak("Noted. I'll keep that in memory — you can see and delete everything I know in the memory panel.");
+    return speak("Noted.");
   }
   if (/\bwhat do you (remember|know)( about me)?\b/.test(t)){
     if (!memories.length) return speak("Nothing yet. Tell me something to remember, or give a device a nickname.");
@@ -627,7 +630,7 @@ function handle(raw){
     return speak(`Thermostat set to ${v} degrees.`);
   }
   if (/\bwhat(?:'s| is)? the temperature\b|\bhow (warm|cold|hot)\b/.test(t)){
-    return speak(`It's ${home.thermostat.target} degrees inside, with the thermostat targeting ${home.thermostat.target} in ${home.thermostat.mode.toLowerCase()} mode.`);
+    return speak(`It's ${home.thermostat.target} degrees inside.`);
   }
   if (/\b(warmer|colder|cooler)\b/.test(t)){
     home.thermostat.target += /warmer/.test(t) ? 2 : -2; renderHome();
@@ -636,10 +639,10 @@ function handle(raw){
 
   // -- sensor queries --
   if (/\bis the (front )?door (open|closed|locked|shut)\b|\bfront door\b/.test(t)){
-    return speak("The front door is closed. It's been closed since 4:10 this afternoon.");
+    return speak("The front door is closed.");
   }
   if (/\bmotion\b|\banyone (home|there|moving)\b/.test(t)){
-    return speak("No motion detected. The last movement was in the hallway, twelve minutes ago.");
+    return speak("No motion — last movement was 12 minutes ago.");
   }
 
   // -- light status --
@@ -681,10 +684,10 @@ function handle(raw){
     return speak("Hi — what would you like me to do?");
   }
   if (/\bwhat can you do\b|\bhelp\b/.test(t)){
-    return speak("Try: turn on the living room lights. Set the thermostat to 68. Is the front door open? Arm the alarm. Remind me to call John in 20 seconds. Or — call the floor lamp the reading light.");
+    return speak("Try: turn on the living room lights, set the thermostat to 68, arm the alarm, or remind me to call John at 5.");
   }
 
-  speak("This preview understands a focused set of commands — the real assistant uses a full language model, so it handles anything you'd naturally say. Try one of the suggestion chips below the mic.");
+  speak("Sorry, that's beyond this preview. Try — turn on the kitchen light.");
 }
 
 // ---------- chips ----------
