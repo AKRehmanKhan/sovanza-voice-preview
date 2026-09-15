@@ -496,6 +496,8 @@ function reallySpeak(text, attempt, seq){
     // Chrome silently pauses remote-voice speech mid-utterance; resume() un-sticks it.
     ttsKeepalive = setInterval(()=>{ if (speechSynthesis.speaking) speechSynthesis.resume(); }, 3000);
   };
+  // Chrome (macOS) can leave the synth engine stuck paused — un-stick before speaking.
+  try{ speechSynthesis.resume(); }catch(e){}
   u.onend = speechDone;
   u.onerror = ()=>{
     if (!started && attempt === 0 && seq === speakSeq){
@@ -815,7 +817,7 @@ function showHeard(txt){
 // Chrome blocks text-to-speech until the page has had one user gesture —
 // prime it on the first click/keypress so Anna's voice is never silently dropped.
 const unlockTTS = ()=>{
-  try{ const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); }catch(e){}
+  try{ speechSynthesis.resume(); const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); }catch(e){}
   document.removeEventListener("pointerdown", unlockTTS);
   document.removeEventListener("keydown", unlockTTS);
 };
