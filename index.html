@@ -440,22 +440,36 @@ if ("speechSynthesis" in window){
   speechSynthesis.onvoiceschanged = pickVoice;
 }
 let currentUtterance = null, ttsKeepalive = null; // refs prevent Chrome GC cutting speech
+// Own speaking flag: Chrome's speechSynthesis.speaking can stay stuck true after an
+// utterance, which would leave the echo-guard deafening the mic forever.
+let annaSpeaking = false, speakGuard = null;
+function speechDone(){
+  annaSpeaking = false;
+  clearInterval(ttsKeepalive); clearTimeout(speakGuard);
+  awaitingCommand ? setOrb("listening") : idleOrb();
+}
+function shutUp(){                 // cancel speech AND clear the flag, everywhere
+  speechSynthesis.cancel();
+  annaSpeaking = false;
+  clearInterval(ttsKeepalive); clearTimeout(speakGuard);
+}
 function speak(text){
   addMsg("ai", text);
   if (!("speechSynthesis" in window)) return;
-  speechSynthesis.cancel();
-  clearInterval(ttsKeepalive);
+  shutUp();
   const u = new SpeechSynthesisUtterance(text);
   currentUtterance = u;
   if (chosenVoice) u.voice = chosenVoice;
   u.rate = 1;
+  annaSpeaking = true;
+  // failsafe: even if onend never fires, un-deafen the mic after the estimated duration
+  speakGuard = setTimeout(speechDone, Math.min(2500 + text.length * 90, 20000));
   u.onstart = ()=>{
     setOrb("speaking");
     // Chrome silently pauses remote-voice speech mid-utterance; resume() un-sticks it.
     ttsKeepalive = setInterval(()=>{ if (speechSynthesis.speaking) speechSynthesis.resume(); }, 3000);
   };
-  const done = ()=>{ clearInterval(ttsKeepalive); awaitingCommand ? setOrb("listening") : idleOrb(); };
-  u.onend = done; u.onerror = done;
+  u.onend = speechDone; u.onerror = speechDone;
   speechSynthesis.speak(u);
 }
 function setOrb(state){
@@ -540,6 +554,12 @@ function chime(){
 
 // ---------- NLU ----------
 function handle(raw){
+  handleCore(raw);
+  // If Anna asked a follow-up (confirm alarm, "for when?"), keep listening for the
+  // spoken answer — otherwise a voice user could never reply without the wake word.
+  if (pending && rec && micOn) setAwaiting(true);
+}
+function handleCore(raw){
   const said = raw.trim();
   if (!said) return;
   addMsg("you", said);
@@ -704,13 +724,13 @@ const CHIPS = [
 ];
 $("chips").innerHTML = CHIPS.map(c=>`<button class="chip">${c}</button>`).join("");
 document.querySelectorAll(".chip").forEach(b=>b.addEventListener("click",()=>{
-  speechSynthesis.cancel(); handle(b.textContent);
+  shutUp(); handle(b.textContent);
 }));
 
 // ---------- text input ----------
 sayInput.addEventListener("keydown", e=>{
   if (e.key === "Enter" && sayInput.value.trim()){
-    speechSynthesis.cancel();
+    shutUp();
     handle(sayInput.value); sayInput.value = "";
   }
 });
@@ -760,13 +780,17 @@ function enableMic(){
 if (SR){
   rec = new SR();
   rec.lang = "en-US"; rec.interimResults = true; rec.continuous = true;
-  rec.onstart = ()=>{ recActive = true; if (!awaitingCommand && !speechSynthesis.speaking) idleOrb(); };
+  rec.onstart = ()=>{ recActive = true; if (!awaitingCommand && !annaSpeaking) idleOrb(); };
   rec.onresult = e=>{
-    if (speechSynthesis.speaking) return;      // don't transcribe Anna's own voice
     let interim = "", final = "";
     for (let i = e.resultIndex; i < e.results.length; i++){   // only new results — continuous sessions accumulate
       const t = e.results[i][0].transcript;
       if (e.results[i].isFinal) final += t; else interim += t;
+    }
+    if (annaSpeaking){
+      // Don't transcribe Anna's own voice — but her name barges in and cuts her off.
+      if (WAKE_RE.test(final || interim)) shutUp();
+      else return;
     }
     if (awaitingCommand) sayInput.value = interim || final;
     if (!final) return;
@@ -780,7 +804,7 @@ if (SR){
     const m = final.match(WAKE_RE);             // passive: scan for the wake word
     if (!m) return;
     const command = final.slice(m.index + m[0].length).trim();
-    speechSynthesis.cancel();                   // barge-in on wake
+    shutUp();                                   // barge-in on wake
     if (command.split(/\s+/).filter(Boolean).length >= 2){
       handle(command);                          // "hi anna turn on the lights"
     } else {
@@ -804,7 +828,7 @@ if (SR){
     // "no-speech" / "aborted" / "network" are harmless: onend restarts the session.
   };
   micBtn.addEventListener("click", ()=>{
-    speechSynthesis.cancel();                   // barge-in
+    shutUp();                                   // barge-in
     if (!micOn){ enableMic(); return; }
     micOn = false;
     setAwaiting(false);
